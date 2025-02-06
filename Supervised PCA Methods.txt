@@ -1,0 +1,68 @@
+# Existing Supervised Principal Components Analysis (SPCA) Methods
+
+#Supervised Principal Components Analysis using HSIC by Barshan, Elnaz et al. “Supervised principal component analysis: Visualization, classification and regression on subspaces and submanifolds.” Pattern Recognit. 44 (2011): 1357-1371.
+
+# Function Inputs: X : Training Data, Y : Training Response Variables, K : RBF Kernel for the Response Variables, q : Number of Components
+# Function Outputs: W : Projection Matrix, eigenvalues : Top q eigenvalues of G
+
+
+SPCA_HSIC <- function(X, Y, K, q) {
+  G <- t(X) %*% K %*% X
+  eig <- eigen(G)
+  eigenvalues <- eig$values
+  eigenvectors <- eig$vectors
+  sorted_indices <- order(eigenvalues, decreasing = TRUE)
+  eigenvalues <- eigenvalues[sorted_indices]
+  eigenvectors <- eigenvectors[, sorted_indices]
+  W <- eigenvectors[, 1:q]
+  return(list(W = W, eigenvalues = eigenvalues[1:q]))
+}
+
+
+#Least Squares Principal Components Analysis (LSPCA) by A. Ritchie, C. Scott, L. Balzano, D. Kessler and C. S. Sripada, "Supervised Principal Component Analysis Via Manifold Optimization," 2019 IEEE Data Science Workshop (DSW), Minneapolis, MN, USA, 2019, pp. 6-10, doi: 10.1109/DSW.2019.8755587.
+
+# Function Inputs: X : Training Data, Y : Training Response Variables, q : Number of Components, p : Number of featurex, lambda : regularisation parameter
+# Function Outputs: LSPCA Objective Function
+
+LSPCA <- function(x, X, Y, q, p = ncol(X), lambda) {
+  L <- matrix(x[1:(p * q)], nrow = p, ncol = q)
+  start_index <- p * q + 1
+  n <- nrow(Y)
+  k <- ncol(Y)
+  w <- matrix(x[start_index:length(x)], nrow = q, ncol = k)
+  XL <- X %*% L
+  lr_resid <- Y - (XL %*% w)
+  pca_resid <- X - (XL %*% t(L))
+  lr_obj <- mean(lr_resid^2)
+  pca_obj <- mean(pca_resid^2)
+  return((lambda * lr_obj) + ((1 - lambda) * pca_obj))
+}
+
+k <- ncol(Y)
+W_LSPCA <- get.grassmann.defn(p, q)
+beta_LSPCA <- get.euclidean.defn(q, k)
+manifold <- get.product.defn(W_LSPCA, beta_LSPCA)
+      
+W_init <- matrix(rnorm(p * q), nrow = p, ncol = q)
+beta_init <- matrix(rnorm(q * k)), nrow = q, ncol = k)
+params_init <- c(as.vector(W_init), as.vector(beta_init))
+      
+mod <- Module("ManifoldOptim_module", PACKAGE = "ManifoldOptim")
+prob <- new(mod$RProblem, function(x) cost_function(x, X, Y, q, p, lambda))
+solver_params <- get.solver.params(DEBUG = 2)
+res <- manifold.optim(prob, manifold, method = "RSD", solver.params = solver_params, x0 = params_init)
+xopt <- res$xopt
+      
+W_optimized <- matrix(xopt[1:(p * q)], nrow = p, ncol = q)
+beta_optimized <- matrix(xopt[(p * q + 1):length(xopt)], nrow = q, ncol = k)
+
+
+#Bair's Supervised Principal Components Analysis by Bair, E., Hastie, T., Paul, D., & Tibshirani, R. (2006). Prediction by Supervised Principal Components. Journal of the American Statistical Association, 101(473), 119–137. https://doi.org/10.1198/016214505000000628
+
+data <- list(x = t(X), y = Y, featurenames = colnames(X))
+model_bair <- superpc.train(data, type = "regression")
+feature_scores <- model_bair$feature.scores
+which.features <- (abs(feature_scores) >= threshold) 
+X_for_pca <- X[,which.features]
+pca_result <- prcomp(X_for_pca, center = FALSE, scale. = FALSE)
+X_bair <- as.data.frame(pca_result$x[, 1:n_components])

@@ -1,0 +1,33 @@
+#The following function performs Covariance Supervised Principal Components Analysis in R.
+
+# Function Inputs: X : Training Data, Y : Training Response Variables, q : Number of components, kappa : Balancing hyperparameter
+# Function Outputs: W : Projection Matrix, eigenvalues : Top q eigenvalues of C
+
+CSPCA <- function(X, Y, q, kappa) {
+  XtX <- t(X) %*% X  
+  XtY <- t(X) %*% Y
+  YtX <- t(Y) %*% X
+  C <- XtY %*% YtX + kappa * XtX  
+  
+  eig <- eigen(C)
+  eigenvalues <- eig$values
+  eigenvectors <- eig$vectors
+  sorted_indices <- order(eigenvalues, decreasing = TRUE)
+  eigenvalues <- eigenvalues[sorted_indices]
+  eigenvectors <- eigenvectors[, sorted_indices]
+  
+  W <- eigenvectors[, 1:q]
+  
+  return(list(W = W, eigenvalues = eigenvalues[1:q]))
+}
+
+#Reference Code Illustration on performing CSPCA for prediction.
+CSPCA <- supervised_pca(X = X_train, Y = Y_train, q = 2, kappa = 0.1)
+W_CSPCA <- CSPCA$W
+Z_train_CSPCA <- X_train %*% W_CSPCA
+Z_test_CSPCA <- X_test %*% W_CSPCA
+combined_training_data_CSPCA <- data.frame(y = Y_train, Z_train_CSPCA)
+linear_model_CSPCA <- lm(y ~ ., data = combined_training_data_CSPCA)
+colnames(Z_test_CSPCA) <- paste0("X", seq_len(ncol(Z_test_CSPCA)))
+Y_pred <- predict(linear_model_supervised, newdata = as.data.frame(Z_test_CSPCA))
+mse <- mean((Y_test - Y_pred_)^2)

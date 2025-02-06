@@ -1,0 +1,16 @@
+#Generating the modified version of the Cancer Genetic Dataset.
+expr <- read.csv("GSE85358.csv")
+expr <- expr[,-1]
+expr <- data.frame(expr)
+data <- t(expr)
+data <- data.frame(data)
+data <- data[,1:1000] 
+
+set.seed(1924)
+sampled_columns <- sample(1:ncol(data), 10)
+X <- data[, sampled_columns]
+X <- as.matrix(X)
+b <- runif(10, min = 0, max = 0.5)  
+e <- rnorm(nrow(X), mean = 0, sd = 0.5)  
+y <- X %*% b + e
+data <- cbind(y,data)

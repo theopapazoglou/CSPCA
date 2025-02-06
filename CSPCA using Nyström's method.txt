@@ -1,0 +1,26 @@
+#This is the function in R to perform CSPCA using Nyström's method.
+# Function Inputs: X: Training Data, Y: Training Response Variables, q : number of components, p : number of features, 
+# m : number of columns sampled for Nyström's method, kappa : balancing parameter for CSPCA 
+# Function Outputs: W : Projection Matrix, eigenvalues : Top q eigenvalues of C_mm
+CSPCA_2 <- function(X, Y, q, p, m, kappa) {
+  XtY <- t(X) %*% Y
+  YtX <- t(Y) %*% X
+  XtX <- t(X) %*% X  
+  C <- XtY %*% YtX + kappa * XtX
+  
+  indices <- sample(1:p, m, replace = FALSE)  
+  C_nm <- C[, indices]  
+  C_mm <- C[indices, indices]
+  eig_Cmm <- eigen(C_mm, symmetric = TRUE)
+  U_m <- eig_Cmm$vectors
+  eigenvalues <- eig_Cmm$values
+  Lambda_m <- diag(eig_Cmm$values)
+  Lambda_m_inv_sqrt <- diag(1 / sqrt(pmax(eig_Cmm$values, 1e-6)))
+  U_n <- C_nm %*% U_m %*% Lambda_m_inv_sqrt
+  C_mm_inv <- MASS::ginv(C_mm)
+  C_approx <- C_nm %*% C_mm_inv %*% t(C_nm)
+  W <- U_n[, 1:q]
+  W <- qr.Q(qr(W))
+  
+  return(list(W = W, eigenvalues = eigenvalues[1:q]))
+}

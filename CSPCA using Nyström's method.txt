@@ -1,26 +1,22 @@
-#This is the function in R to perform CSPCA using Nyström's method.
-# Function Inputs: X: Training Data, Y: Training Response Variables, q : number of components, p : number of features, 
-# m : number of columns sampled for Nyström's method, kappa : balancing parameter for CSPCA 
-# Function Outputs: W : Projection Matrix, eigenvalues : Top q eigenvalues of C_mm
-CSPCA_2 <- function(X, Y, q, p, m, kappa) {
-  XtY <- t(X) %*% Y
-  YtX <- t(Y) %*% X
-  XtX <- t(X) %*% X  
-  C <- XtY %*% YtX + kappa * XtX
-  
-  indices <- sample(1:p, m, replace = FALSE)  
-  C_nm <- C[, indices]  
-  C_mm <- C[indices, indices]
-  eig_Cmm <- eigen(C_mm, symmetric = TRUE)
-  U_m <- eig_Cmm$vectors
-  eigenvalues <- eig_Cmm$values
-  Lambda_m <- diag(eig_Cmm$values)
-  Lambda_m_inv_sqrt <- diag(1 / sqrt(pmax(eig_Cmm$values, 1e-6)))
-  U_n <- C_nm %*% U_m %*% Lambda_m_inv_sqrt
-  C_mm_inv <- MASS::ginv(C_mm)
-  C_approx <- C_nm %*% C_mm_inv %*% t(C_nm)
-  W <- U_n[, 1:q]
-  W <- qr.Q(qr(W))
-  
-  return(list(W = W, eigenvalues = eigenvalues[1:q]))
-}
+#This is the function to perform CSPCA using Nyström's extension.
+
+def cspca_nym(X, Y, q, p, m, lambda_):
+    XtY = X.T @ Y
+    YtX = Y.T @ X
+    XtX = X.T @ X
+    C = XtY @ YtX + lambda_ * XtX  
+    indices = onp.random.choice(p, size=m, replace=False)
+    C_nm = C[:, indices]  
+    C_mm = C[indices, :][:, indices]  
+    eigenvalues, U_m = linalg.eigh(C_mm)  
+    sorted_indices = onp.argsort(eigenvalues)[::-1]
+    eigenvalues = eigenvalues[sorted_indices]
+    U_m = U_m[:, sorted_indices]
+    Lambda_m = onp.diag(eigenvalues)
+    Lambda_m_inv_sqrt = onp.diag(1.0 / onp.sqrt(onp.maximum(eigenvalues, 1e-6)))
+    U_n = C_nm @ U_m @ Lambda_m_inv_sqrt  
+    C_mm_inv = pinv(C_mm)  
+    C_approx = C_nm @ C_mm_inv @ C_nm.T
+    W = U_n[:, :q]
+    W, _ = qr(W, mode='economic')  
+    return {'W': W, 'eigenvalues': eigenvalues[:q]}

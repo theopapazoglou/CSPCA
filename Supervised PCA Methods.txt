@@ -1,68 +1,272 @@
-# Existing Supervised Principal Components Analysis (SPCA) Methods
-
-#Supervised Principal Components Analysis using HSIC by Barshan, Elnaz et al. “Supervised principal component analysis: Visualization, classification and regression on subspaces and submanifolds.” Pattern Recognit. 44 (2011): 1357-1371.
-
-# Function Inputs: X : Training Data, Y : Training Response Variables, K : RBF Kernel for the Response Variables, q : Number of Components
-# Function Outputs: W : Projection Matrix, eigenvalues : Top q eigenvalues of G
-
-
-SPCA_HSIC <- function(X, Y, K, q) {
-  G <- t(X) %*% K %*% X
-  eig <- eigen(G)
-  eigenvalues <- eig$values
-  eigenvectors <- eig$vectors
-  sorted_indices <- order(eigenvalues, decreasing = TRUE)
-  eigenvalues <- eigenvalues[sorted_indices]
-  eigenvectors <- eigenvectors[, sorted_indices]
-  W <- eigenvectors[, 1:q]
-  return(list(W = W, eigenvalues = eigenvalues[1:q]))
-}
-
-
-#Least Squares Principal Components Analysis (LSPCA) by A. Ritchie, C. Scott, L. Balzano, D. Kessler and C. S. Sripada, "Supervised Principal Component Analysis Via Manifold Optimization," 2019 IEEE Data Science Workshop (DSW), Minneapolis, MN, USA, 2019, pp. 6-10, doi: 10.1109/DSW.2019.8755587.
-
-# Function Inputs: X : Training Data, Y : Training Response Variables, q : Number of Components, p : Number of featurex, lambda : regularisation parameter
-# Function Outputs: LSPCA Objective Function
-
-LSPCA <- function(x, X, Y, q, p = ncol(X), lambda) {
-  L <- matrix(x[1:(p * q)], nrow = p, ncol = q)
-  start_index <- p * q + 1
-  n <- nrow(Y)
-  k <- ncol(Y)
-  w <- matrix(x[start_index:length(x)], nrow = q, ncol = k)
-  XL <- X %*% L
-  lr_resid <- Y - (XL %*% w)
-  pca_resid <- X - (XL %*% t(L))
-  lr_obj <- mean(lr_resid^2)
-  pca_obj <- mean(pca_resid^2)
-  return((lambda * lr_obj) + ((1 - lambda) * pca_obj))
-}
-
-k <- ncol(Y)
-W_LSPCA <- get.grassmann.defn(p, q)
-beta_LSPCA <- get.euclidean.defn(q, k)
-manifold <- get.product.defn(W_LSPCA, beta_LSPCA)
-      
-W_init <- matrix(rnorm(p * q), nrow = p, ncol = q)
-beta_init <- matrix(rnorm(q * k)), nrow = q, ncol = k)
-params_init <- c(as.vector(W_init), as.vector(beta_init))
-      
-mod <- Module("ManifoldOptim_module", PACKAGE = "ManifoldOptim")
-prob <- new(mod$RProblem, function(x) cost_function(x, X, Y, q, p, lambda))
-solver_params <- get.solver.params(DEBUG = 2)
-res <- manifold.optim(prob, manifold, method = "RSD", solver.params = solver_params, x0 = params_init)
-xopt <- res$xopt
-      
-W_optimized <- matrix(xopt[1:(p * q)], nrow = p, ncol = q)
-beta_optimized <- matrix(xopt[(p * q + 1):length(xopt)], nrow = q, ncol = k)
+import numpy as onp  
+import autograd.numpy as np  
+import pandas as pd
+from sklearn.decomposition import PCA
+from sklearn.cross_decomposition import PLSRegression
+from sklearn.linear_model import LogisticRegression
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.metrics import log_loss, accuracy_score, roc_auc_score
+from sklearn.preprocessing import StandardScaler
+from scipy.spatial.distance import cdist
+from scipy import linalg
+#!pip install pymanopt
+from pymanopt.manifolds import Grassmann, Euclidean, Product
+from pymanopt import Problem
+from pymanopt.optimizers import SteepestDescent
+import pymanopt.function
+from sklearn.preprocessing import StandardScaler
+from scipy.linalg import eigh
 
 
-#Bair's Supervised Principal Components Analysis by Bair, E., Hastie, T., Paul, D., & Tibshirani, R. (2006). Prediction by Supervised Principal Components. Journal of the American Statistical Association, 101(473), 119–137. https://doi.org/10.1198/016214505000000628
+y = pd.read_csv("actual.csv")
+data_2 = pd.read_csv("data_set_ALL_AML_independent.csv")
+data_3 = pd.read_csv("data_set_ALL_AML_train.csv")
 
-data <- list(x = t(X), y = Y, featurenames = colnames(X))
-model_bair <- superpc.train(data, type = "regression")
-feature_scores <- model_bair$feature.scores
-which.features <- (abs(feature_scores) >= threshold) 
-X_for_pca <- X[,which.features]
-pca_result <- prcomp(X_for_pca, center = FALSE, scale. = FALSE)
-X_bair <- as.data.frame(pca_result$x[, 1:n_components])
+Y = y.replace({'ALL':0,'AML':1})
+labels = ['ALL', 'AML']
+train_to_keep = [col for col in data_3.columns if "call" not in col]
+test_to_keep = [col for col in data_2.columns if "call" not in col]
+X_train_tr = data_3[train_to_keep]
+X_test_tr = data_2[test_to_keep]
+train_columns_titles = ['Gene Description', 'Gene Accession Number', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
+       '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25',
+       '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38']
+X_train_tr = X_train_tr.reindex(columns=train_columns_titles)
+test_columns_titles = ['Gene Description', 'Gene Accession Number','39', '40', '41', '42', '43', '44', '45', '46',
+       '47', '48', '49', '50', '51', '52', '53',  '54', '55', '56', '57', '58', '59',
+       '60', '61', '62', '63', '64', '65', '66', '67', '68', '69', '70', '71', '72']
+X_test_tr = X_test_tr.reindex(columns=test_columns_titles)
+X_train = X_train_tr.T
+X_test = X_test_tr.T
+X_train.columns = X_train.iloc[1]
+X_train = X_train.drop(["Gene Description", "Gene Accession Number"]).apply(pd.to_numeric)
+X_test.columns = X_test.iloc[1]
+X_test = X_test.drop(["Gene Description", "Gene Accession Number"]).apply(pd.to_numeric)
+X_train = X_train.reset_index(drop=True)
+Y_train = Y[Y.patient <= 38].reset_index(drop=True)
+X_test = X_test.reset_index(drop=True)
+Y_test = Y[Y.patient > 38].reset_index(drop=True)
+X_train_fl = X_train.astype(float, 64)
+X_test_fl = X_test.astype(float, 64)
+
+
+scaler = StandardScaler()
+X_train_scl = scaler.fit_transform(X_train_fl)
+X_test_scl = scaler.transform(X_test_fl)
+Y_train = Y_train['cancer']
+Y_test = Y_test['cancer']
+
+
+def delta_kernel(Y):
+    n = len(Y)
+    K = onp.zeros((n, n))
+    for i in range(n):
+        for j in range(n):
+            K[i, j] = 1 if Y[i] == Y[j] else 0
+    return K
+
+
+def spca_hsic(X, Y, K, q, epsilon= 1e-6):
+    n = K.shape[0]
+    K_reg = K + epsilon * np.eye(n)
+    Delta = linalg.cholesky(K_reg, lower=True)  
+    psi = X.T @ Delta  
+    U, s, Vt = svd(psi, full_matrices=False)
+    Sigma = onp.diag(s)
+    U_d = U[:, :q]
+    Sigma_d = Sigma[:q, :q]
+    V_d = Vt.T[:, :q]  
+    U_hat = psi @ V_d @ linalg.inv(Sigma_d)  
+    eigenvalues = s[:q]**2  
+    return {'W': U_hat, 'singular_values': eigenvalues}
+
+
+def cspca(X, Y, q, p, m, lambda_):
+    XtX = X.T @ X
+    C = X.T @ delta_kernel(Y) @ X + lambda_ * XtX
+    indices = onp.random.choice(p, size=m, replace=False)
+    C_nm = C[:, indices]  
+    C_mm = C[indices, :][:, indices]  
+    eigenvalues, U_m = linalg.eigh(C_mm)  
+    sorted_indices = onp.argsort(eigenvalues)[::-1]
+    eigenvalues = eigenvalues[sorted_indices]
+    U_m = U_m[:, sorted_indices]
+    Lambda_m = onp.diag(eigenvalues)
+    Lambda_m_inv_sqrt = onp.diag(1.0 / onp.sqrt(onp.maximum(eigenvalues, 1e-6)))
+    U_n = C_nm @ U_m @ Lambda_m_inv_sqrt  
+    C_mm_inv = pinv(C_mm)  
+    C_approx = C_nm @ C_mm_inv @ C_nm.T
+    # Extract top q components and orthogonalize
+    W = U_n[:, :q]
+    W, _ = qr(W, mode='economic') 
+    return {'W': W, 'eigenvalues': eigenvalues[:q]}
+
+
+
+def run_all_methods_analysis(X_train, Y_train, X_test, Y_test, n_components_list=[2, 4, 6, 8, 10],
+                             manifold_lambda=_, lambda_=_, threshold=_):
+    p = X_train.shape[1]
+
+    results = pd.DataFrame({
+        'n_components': n_components_list,
+        'variance_explained_pcr': onp.zeros(len(n_components_list)),
+        'log_loss_pcr': onp.zeros(len(n_components_list)),
+        'accuracy_pcr': onp.zeros(len(n_components_list)),
+        'auc_pcr': onp.zeros(len(n_components_list)),
+        'variance_explained_lda': onp.zeros(len(n_components_list)),
+        'log_loss_lda': onp.zeros(len(n_components_list)),
+        'accuracy_lda': onp.zeros(len(n_components_list)),
+        'auc_lda': onp.zeros(len(n_components_list)),
+        'variance_explained_barshan': onp.zeros(len(n_components_list)),
+        'log_loss_barshan': onp.zeros(len(n_components_list)),
+        'accuracy_barshan': onp.zeros(len(n_components_list)),
+        'auc_barshan': onp.zeros(len(n_components_list)),
+        'variance_explained_bair': onp.zeros(len(n_components_list)),
+        'log_loss_bair': onp.zeros(len(n_components_list)),
+        'accuracy_bair': onp.zeros(len(n_components_list)),
+        'auc_bair': onp.zeros(len(n_components_list)),
+        'variance_explained_supervised': onp.zeros(len(n_components_list)),
+        'log_loss_supervised': onp.zeros(len(n_components_list)),
+        'accuracy_supervised': onp.zeros(len(n_components_list)),
+        'auc_supervised': onp.zeros(len(n_components_list)),
+        'variance_explained_manifold': onp.zeros(len(n_components_list)),
+        'log_loss_manifold': onp.zeros(len(n_components_list)),
+        'accuracy_manifold': onp.zeros(len(n_components_list)),
+        'auc_manifold': onp.zeros(len(n_components_list)),
+    })
+
+    X_train_np = np.array(X_train)
+    X_test_np = np.array(X_test)
+    Y_train_np = np.array(Y_train)
+    Y_test_np = np.array(Y_test)
+
+    for i, n_components in enumerate(n_components_list):
+        # PCR
+        pca = PCA(n_components=n_components)
+        X_train_pca = pca.fit_transform(X_train)
+        X_test_pca = pca.transform(X_test)
+        var_explained = onp.sum(pca.explained_variance_ratio_)
+        results.loc[i, 'variance_explained_pcr'] = var_explained
+        clf = LogisticRegression(solver='lbfgs', max_iter=1000)
+        clf.fit(X_train_pca, Y_train)
+        Y_pred_proba = clf.predict_proba(X_test_pca)[:, 1]
+        Y_pred = clf.predict(X_test_pca)
+        results.loc[i, 'log_loss_pcr'] = log_loss(Y_test, Y_pred_proba)
+        results.loc[i, 'accuracy_pcr'] = accuracy_score(Y_test, Y_pred)
+        results.loc[i, 'auc_pcr'] = roc_auc_score(Y_test, Y_pred_proba)
+
+        # LDA
+        n_comp_lda = min(n_components, len(np.unique(Y_train))-1, X_train.shape[1])
+        lda = LinearDiscriminantAnalysis(n_components=n_comp_lda)
+        X_train_lda = lda.fit_transform(X_train, Y_train)
+        X_test_lda = lda.transform(X_test)
+        var_explained_lda = np.sum(lda.explained_variance_ratio_)
+        results.loc[i, 'variance_explained_lda'] = var_explained_lda
+        Y_pred_proba_lda = lda.predict_proba(X_test)[:, 1]
+        Y_pred_lda = lda.predict(X_test)
+        results.loc[i, 'log_loss_lda'] = log_loss(Y_test, Y_pred_proba_lda)
+        results.loc[i, 'accuracy_lda'] = accuracy_score(Y_test, Y_pred_lda)
+        results.loc[i, 'auc_lda'] = roc_auc_score(Y_test, Y_pred_proba_lda)
+
+        # SPCA using HSIC
+        K = delta_kernel(Y_train)
+        spca_result = spca_hsic(X_train, Y_train, K, n_components)
+        W_barshan = spca_result['W']
+        Z_train_bar = X_train @ W_barshan
+        Z_test_bar = X_test @ W_barshan
+        total_var = onp.trace(X_train.T @ X_train)
+        expl_var = onp.trace(W_barshan.T @ X_train.T @ X_train @ W_barshan)
+        results.loc[i, 'variance_explained_barshan'] = expl_var / total_var
+        clf_barshan = LogisticRegression(solver='lbfgs', max_iter=1000)
+        clf_barshan.fit(Z_train_bar, Y_train)
+        Y_pred_proba_bar = clf_barshan.predict_proba(Z_test_bar)[:, 1]
+        Y_pred_bar = clf_barshan.predict(Z_test_bar)
+        results.loc[i, 'log_loss_barshan'] = log_loss(Y_test, Y_pred_proba_bar)
+        results.loc[i, 'accuracy_barshan'] = accuracy_score(Y_test, Y_pred_bar)
+        results.loc[i, 'auc_barshan'] = roc_auc_score(Y_test, Y_pred_proba_bar)
+
+
+        # Bair's Method
+        feature_scores = onp.abs(onp.corrcoef(X_train.T, Y_train.T)[:-1, -1])
+        selected_features = feature_scores >= threshold
+        X_train_selected = X_train[:, selected_features]
+        X_test_selected = X_test[:, selected_features]
+        pca_bair = PCA(n_components=min(n_components, X_train_selected.shape[1]))
+        X_train_bair = pca_bair.fit_transform(X_train_selected)
+        X_test_bair = pca_bair.transform(X_test_selected)
+        expl_var_bair = onp.trace(X_train_bair.T @ X_train_bair)
+        results.loc[i,'variance_explained_bair'] = expl_var_bair / total_var
+        clf_bair = LogisticRegression(solver='lbfgs', max_iter=1000)
+        clf_bair.fit(X_train_bair, Y_train)
+        Y_pred_proba_bair = clf_bair.predict_proba(X_test_bair)[:, 1]
+        Y_pred_bair = clf_bair.predict(X_test_bair)
+        results.loc[i, 'log_loss_bair'] = log_loss(Y_test, Y_pred_proba_bair)
+        results.loc[i, 'accuracy_bair'] = accuracy_score(Y_test, Y_pred_bair)
+        results.loc[i, 'auc_bair'] = roc_auc_score(Y_test, Y_pred_proba_bair)
+
+
+        # CSPCA
+        cspca_sup = cspca(X_train, Y_train, q=n_components, p=p, m=80, lambda_=lambda_)
+        W_sup = cspca_sup['W']
+        Z_train_sup = X_train @ W_sup
+        Z_test_sup = X_test @ W_sup
+        expl_var_sup = onp.trace(W_sup.T @ X_train.T @ X_train @ W_sup)
+        results.loc[i, 'variance_explained_supervised'] = expl_var_sup / total_var
+        clf_sup = LogisticRegression(solver='lbfgs', max_iter=1000)
+        clf_sup.fit(Z_train_sup, Y_train)
+        Y_pred_proba_sup = clf_sup.predict_proba(Z_test_sup)[:, 1]
+        Y_pred_sup = clf_sup.predict(Z_test_sup)
+        results.loc[i, 'log_loss_supervised'] = log_loss(Y_test, Y_pred_proba_sup)
+        results.loc[i, 'accuracy_supervised'] = accuracy_score(Y_test, Y_pred_sup)
+        results.loc[i, 'auc_supervised'] = roc_auc_score(Y_test, Y_pred_proba_sup)
+
+
+        # LSPCA
+        manifold = Product([Grassmann(p, n_components), Euclidean(n_components, 1)])
+        @pymanopt.function.autograd(manifold)
+        def cost(L, w):
+                XL = X_train_np @ L
+                logits = XL @ w
+                logits = np.clip(logits, -5, 5)
+                y_hat = 1 / (1 + np.exp(-logits))
+                eps = 1e-12
+                lr_obj = -np.mean(Y_train_np * np.log(y_hat + eps) + (1 - Y_train_np) * np.log(1 - y_hat + eps))
+                pca_resid = X_train_np - (XL @ L.T)
+                pca_obj = np.mean(pca_resid ** 2)
+                return (manifold_lambda * lr_obj) + ((1 - manifold_lambda) * pca_obj)
+                
+            
+        problem = Problem(manifold=manifold, cost=cost)
+        solver = SteepestDescent(verbosity=2)
+        L_init = np.random.normal(size=(p, n_components))
+        w_init = np.random.normal(size=(n_components, 1))
+        result = solver.run(problem, initial_point=[L_init, w_init])
+        L_optimized, w_optimized = result.point
+        Z_train_man = X_train @ L_optimized
+        Z_test_man = X_test @ L_optimized
+        Y_pred_proba_man = 1 / (1 + np.exp(-Z_test_man @ w_optimized))
+        Y_pred_man = (Y_pred_proba_man > 0.5).astype(int)
+        expl_var_man = np.trace(L_optimized.T @ X_train.T @ X_train @ L_optimized)
+        results.loc[i, 'variance_explained_manifold'] = expl_var_man / total_var
+        results.loc[i, 'log_loss_manifold'] = log_loss(Y_test, Y_pred_proba_man)
+        results.loc[i, 'accuracy_manifold'] = accuracy_score(Y_test, Y_pred_man)
+        results.loc[i, 'auc_manifold'] = roc_auc_score(Y_test, Y_pred_proba_man)
+
+    return results
+
+n_components_list = [2,4,6,8,10]
+onp.random.seed(1924)
+results = run_all_methods_analysis(X_train_scl, Y_train, X_test_scl, Y_test, n_components_list=n_components_list)
+methods = ['pcr', 'lda', 'barshan', 'bair', 'supervised', 'manifold']
+print("\nGolub's Leukemia Dataset Classification Results:")
+for method in methods:
+    print(f"\n{method.upper()}:")
+    for metric in ['Variance Explained', 'Log Loss', 'Accuracy', 'AUC']:
+        print(f"  {metric}:")
+        for i, n_comp in enumerate(n_components_list):
+            if metric == 'Variance Explained':
+                key = 'variance_explained_pcr' if method == 'pcr' else f'variance_explained_{method}'
+            else:
+                key = f'{metric.lower().replace(" ", "_")}_{method}'
+            value = results.loc[i, key]
+            print(f"    n_components = {n_comp}: {value:.4f}")

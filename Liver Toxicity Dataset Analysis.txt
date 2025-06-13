@@ -21,7 +21,7 @@ def rbf_kernel(Y, sigma):
     K = np.exp(-dist_matrix**2 / (2 * sigma**2))
     return K
 
-def barshan_pca(X, Y, K, q):
+def spca_hsic(X, Y, K, q):
     Delta = linalg.cholesky(K, lower=True)  
     psi = X.T @ Delta  
     U, s, Vt = svd(psi, full_matrices=False)
@@ -34,7 +34,7 @@ def barshan_pca(X, Y, K, q):
     return {'W': U_hat, 'singular_values': eigenvalues}
 
 
-def supervised_pca(X, Y, q, p, m, lambda_):
+def cspca(X, Y, q, p, m, lambda_):
     XtY = X.T @ Y
     YtX = Y.T @ X
     XtX = X.T @ X
@@ -118,10 +118,10 @@ def run_all_methods_analysis(data, n_splits=10, n_components_list=[2,4,6,8,10],
             K = rbf_kernel(Y_train, sigma)
             epsilon = 1e-15  
             K += epsilon * np.eye(K.shape[0])
-            spca_result = barshan_pca(X_train, Y_train, K, n_components)
-            W_barshan = spca_result['W']
-            Z_train_bar = X_train @ W_barshan
-            Z_test_bar = X_test @ W_barshan
+            spca_result = spca_hsic(X_train, Y_train, K, n_components)
+            W_bar = spca_result['W']
+            Z_train_bar = X_train @ W_bar
+            Z_test_bar = X_test @ W_bar
             total_var = onp.trace(X_train.T @ X_train)
             expl_var = onp.trace(W_barshan.T @ X_train.T @ X_train @ W_barshan)
             results[n_components]['variance_explained_barshan'].append(expl_var / total_var)
@@ -150,17 +150,17 @@ def run_all_methods_analysis(data, n_splits=10, n_components_list=[2,4,6,8,10],
             results[n_components]['covariance_explained_Bair'].append(onp.sum(cov_zy**2) / onp.sum(cov_xy**2))
 
             # CSPCA
-            spca_sup = supervised_pca(X_train, Y_train, n_components, p=p, m=240, lambda_=lambda_)
-            W_sup = spca_sup['W']
-            Z_train_sup = X_train @ W_sup
-            Z_test_sup = X_test @ W_sup
-            expl_var_sup = onp.trace(W_sup.T @ X_train.T @ X_train @ W_sup)
+            spca_sup = cspca(X_train, Y_train, n_components, p=p, m=55, lambda_=lambda_)
+            W = spca_sup['W']
+            Z_train = X_train @ W
+            Z_test = X_test @ W
+            expl_var_sup = onp.trace(W.T @ X_train.T @ X_train @ W)
             results[n_components]['variance_explained_supervised'].append(expl_var_sup / total_var)
-            lr_sup = LinearRegression().fit(Z_train_sup, Y_train)
-            Y_pred_sup = lr_sup.predict(Z_test_sup)
+            lr_sup = LinearRegression().fit(Z_train, Y_train)
+            Y_pred_sup = lr_sup.predict(Z_test)
             results[n_components]['mse_Supervised'].append(mean_squared_error(Y_test, Y_pred_sup))
             results[n_components]['R2_Supervised'].append(r2_score(Y_test, Y_pred_sup))
-            cov_zy = onp.cov(Z_train_sup.T, Y_train.T)[:-1, -1]
+            cov_zy = onp.cov(Z_train.T, Y_train.T)[:-1, -1]
             results[n_components]['covariance_explained_Supervised'].append(onp.sum(cov_zy**2) / onp.sum(cov_xy**2))
 
             # LSPCA
@@ -214,14 +214,14 @@ def run_all_methods_analysis(data, n_splits=10, n_components_list=[2,4,6,8,10],
         'covariance_explained_Supervised': [onp.mean(results[n_comp]['covariance_explained_Supervised']) for n_comp in n_components_list],
         'variance_explained_manifold': [onp.mean(results[n_comp]['variance_explained_manifold']) for n_comp in n_components_list],
         'mse_Manifold': [onp.mean(results[n_comp]['mse_Manifold']) for n_comp in n_components_list],
-        'R2_Manifold': [onp.mean(results[n_comp]['R2_Manifold']) for n_comp in n_components_list],
-        'covariance_explained_Manifold': [onp.mean(results[n_comp]['covariance_explained_Manifold']) for n_comp in n_components_list]
+        'R2_Manifo': [onp.mean(results[n_comp]['R2_Manifold']) for n_comp in n_components_list],
+        'covariance_explained_LSPCA': [onp.mean(results[n_comp]['covariance_explained_LSPCA']) for n_comp in n_components_list]
     })
 
     return {'per_split_results': results, 'averaged_results': results_df}
 
 def run_real_data_analysis(data, n_splits=20, n_components_list=[2,4,6,8,10]):
-    methods = ['PCR', 'PLS', 'Barshan', 'Bair', 'Supervised', 'Manifold']
+    methods = ['PCR', 'PLS', 'SPCA_HSIC', 'Bair', 'CSPCA', 'LSPCA']
     results = {method: {
         'VarExpl': onp.zeros((len(n_components_list), n_splits)),
         'MSE': onp.zeros((len(n_components_list), n_splits)),

@@ -301,9 +301,9 @@ def run_all_methods_analysis(data, n_components_list=[2,4,6,8,10],
 
 # Simulation A: Linear (Y=3X_1-5X_2+4X_3+ε), i.i.d. scenario
 def run_simulation_A(n_datasets=50, n=100, p=600, n_components_list=[2,4,6,8,10],
-                    manifold_lambda_list=[],
-                    lambda_list=[],
-                    threshold_list=[],
+                    lambda_list=np.arange(0.001, 0.101, 0.001).tolist(),
+                    kappa_list=np.arange(0.1, 50.06, 0.5).tolist(),
+                    threshold_list=np.arange(0.05, 0.101, 0.025).tolist(),
                     seed=1234):
     methods = ['PCR', 'PLS', 'HSIC', 'Bair', 'CSPCA', 'LSPCA']
     results = {method: {

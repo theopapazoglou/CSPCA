@@ -284,3 +284,124 @@ def run_simulation_A(n_datasets=50, n=100, p=600, n_splits=1, n_components_list=
             results[method]['R2'][i] = res[f'R2_{method}']
             if method != 'PLS':  
                 results[method]['CovExpl'][i] = res[f'covariance_explained_{method}']
+
+
+#Simulation B: Non-Linear(Y=exp(X_1)+3sin(X_2)-4X_3+ε), i.i.d scenario
+def run_simulation_B(n_datasets=50, n=100, p=600, n_splits=1, n_components_list=[2,4,6,8,10]):
+    methods = ['PCR', 'PLS', 'Barshan', 'Bair', 'Supervised', 'Manifold']
+    results = {method: {
+        'VarExpl': onp.zeros((n_datasets, len(n_components_list))),
+        'MSE': onp.zeros((n_datasets, len(n_components_list))),
+        'CovExpl': onp.zeros((n_datasets, len(n_components_list))),
+        'R2': onp.zeros((n_datasets, len(n_components_list)))
+    } for method in methods}
+
+    for i in range(n_datasets):
+        onp.random.seed(123 + i)
+        X = onp.random.normal(size=(n, p))
+        X_informative = X[:, :3]
+        X1 = X_informative[:, 0]
+        X2 = X_informative[:, 1]
+        X3 = X_informative[:, 2]
+        error = onp.random.normal(0, 0.1, n)
+        Y = onp.exp(X1) + 3 * onp.sin(X2) - 4 * X3 + error
+        data_A = onp.column_stack((Y[:, onp.newaxis], X)) 
+
+        res = run_all_methods_analysis(data_A, n_splits=n_splits, n_components_list=n_components_list)
+
+        for method in methods:
+            results[method]['VarExpl'][i] = res[f'variance_explained_{method.lower()}']
+            results[method]['MSE'][i] = res[f'mse_{method}']
+            results[method]['R2'][i] = res[f'R2_{method}']
+            if method != 'PLS':  # PLS doesn't compute covariance explained directly
+              results[method]['CovExpl'][i] = res[f'covariance_explained_{method}']
+
+    def compute_stats(metric_matrix):
+        avg = onp.nanmean(metric_matrix, axis=0)
+        std_err = onp.nanstd(metric_matrix, axis=0) / onp.sqrt(n_datasets)
+        return {'avg': avg, 'std_err': std_err}
+
+    stats = {method: {
+        'VarExpl': compute_stats(results[method]['VarExpl']),
+        'MSE': compute_stats(results[method]['MSE']),
+        'CovExpl': compute_stats(results[method]['CovExpl']),
+        'R2': compute_stats(results[method]['R2'])
+    } for method in methods}
+
+    
+    print("\nSimulation B (Non-Linear: Y=exp(X_1)+3sin(X_2)-4X_3+ error):")
+    for method in methods:
+        print(f"  {method}:")
+        for metric in ['Variance Explained', 'MSE', 'Covariance Explained', 'R2']:
+            print(f"    {metric}:")
+            for j, n_comp in enumerate(n_components_list):
+                key = metric.split()[0][:3] + ('Expl' if 'Explained' in metric else '')
+                avg = stats[method][key]['avg'][j]
+                se = stats[method][key]['std_err'][j]
+                print(f"      n_components = {n_comp}: Avg = {avg:.4f} ± {se:.4f}")
+
+    return {'stats': stats, 'raw_results': results}
+
+#Simulation B: Non-Linear(Y=exp(X_1)+3sin(X_2)-4X_3+ε), correlated scenario
+def run_simulation_A(n_datasets=50, n=100, p=600, n_splits=1, n_components_list=[2,4,6,8,10], rho=0.4):
+    methods = ['PCR', 'PLS', 'Barshan', 'Bair', 'Supervised', 'Manifold']
+    results = {method: {
+        'VarExpl': onp.zeros((n_datasets, len(n_components_list))),
+        'MSE': onp.zeros((n_datasets, len(n_components_list))),
+        'CovExpl': onp.zeros((n_datasets, len(n_components_list))),
+        'R2': onp.zeros((n_datasets, len(n_components_list)))
+    } for method in methods}
+
+    def create_toeplitz_cov(p, rho):
+        cov = onp.zeros((p, p))
+        for i in range(p):
+            for j in range(p):
+                cov[i, j] = rho ** abs(i - j)
+        return cov
+
+    for i in range(n_datasets):
+        onp.random.seed(123 + i)
+        cov_matrix = create_toeplitz_cov(p, rho)
+        X = onp.random.multivariate_normal(mean=onp.zeros(p), cov=cov_matrix, size=n)
+        X_informative = X[:, :3]
+        X1 = X_informative[:, 0]
+        X2 = X_informative[:, 1]
+        X3 = X_informative[:, 2]
+        error = onp.random.normal(0, 0.1, n)
+        Y = onp.exp(X1) + 3 * onp.sin(X2) - 4 * X3 + error
+        data_A = onp.column_stack((Y[:, onp.newaxis], X))
+
+
+        res = run_all_methods_analysis(data_A, n_splits=n_splits, n_components_list=n_components_list)
+        for method in methods:
+            results[method]['VarExpl'][i] = res[f'variance_explained_{method.lower()}']
+            results[method]['MSE'][i] = res[f'mse_{method}']
+            results[method]['R2'][i] = res[f'R2_{method}']
+            if method != 'PLS':  # PLS doesn't compute covariance explained directly
+                results[method]['CovExpl'][i] = res[f'covariance_explained_{method}']
+
+    def compute_stats(metric_matrix):
+        avg = onp.nanmean(metric_matrix, axis=0)
+        std_err = onp.nanstd(metric_matrix, axis=0) / onp.sqrt(n_datasets)
+        return {'avg': avg, 'std_err': std_err}
+
+    stats = {method: {
+        'VarExpl': compute_stats(results[method]['VarExpl']),
+        'MSE': compute_stats(results[method]['MSE']),
+        'CovExpl': compute_stats(results[method]['CovExpl']),
+        'R2': compute_stats(results[method]['R2'])
+    } for method in methods}
+
+    print(f"\nSimulation B (Non-Linear: Y=exp(X_1)+3sin(X_2)-4X_3+ error))
+ + error, rho={rho}):")
+    for method in methods:
+        print(f"  {method}:")
+        for metric in ['Variance Explained', 'MSE', 'Covariance Explained', 'R2']:
+            print(f"    {metric}:")
+            for j, n_comp in enumerate(n_components_list):
+                key = metric.split()[0][:3] + ('Expl' if 'Explained' in metric else '')
+                avg = stats[method][key]['avg'][j]
+                se = stats[method][key]['std_err'][j]
+                print(f"      n_components = {n_comp}: Avg = {avg:.4f} ± {se:.4f}")
+
+    return {'stats': stats, 'raw_results': results}

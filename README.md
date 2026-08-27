@@ -12,14 +12,14 @@ Each script is self-contained. It includes library imports, all helper functions
 Simulation1.py contains the single-scalar linear simulation scenario for both i.i.d. and correlated DGPs, while Simulation2.py contains the single-scalar non-linear scenario for both i.i.d. and correlated data DGPs. Simulation3.py contains the multivariate linear response scenario for both i.i.d. and correlated DGPs, while Simulation4.py contains the multivariate non-linear scenario for both i.i.d. and correlated DGPs.
 
 # Real Data Analyses
-Liver_toxicity_regression.py contains the regression analysis based on a rat liver toxicity expression dataset (Bushel et al., 2007) extracted from the mixOmics library of the Bioconductor R Package (https://www.rdocumentation.org/packages/mixOmics/versions/6.3.2/topics/liver.toxicity). Colon_cancer_classification.py contains the binary classification analysis based on a colon cancer expression dataset (Alon et al., 1999) extracted from the colonCA library of the Bioconductor R Package (https://bioconductor.org/packages/release/data/experiment/html/colonCA.html). Leukaemia_classification.py contains the binary classification analysis based on a gene expression study (Golub et al., 1999) extracted from OpenML (https://www.openml.org/search?type=data&sort=runs&id=1104&status=active). Finally, PANCAN_classification.py contains the multiclass classification analysis based on a TCGA Pan-Cancer RNA-Seq dataset (Weinstein et al., 2013) extracted from the UCI Machine Learning repository (https://archive.ics.uci.edu/dataset/401/gene+expression+cancer+
-rna+seq).
+Liver_toxicity_regression.py contains the regression analysis based on a rat liver toxicity expression dataset (Bushel et al., 2007) extracted from the mixOmics library of the Bioconductor R Package (https://www.rdocumentation.org/packages/mixOmics/versions/6.3.2/topics/liver.toxicity). Colon_cancer_classification.py contains the binary classification analysis based on a colon cancer expression dataset (Alon et al., 1999) extracted from the colonCA library of the Bioconductor R Package (https://bioconductor.org/packages/release/data/experiment/html/colonCA.html). Leukaemia_classification.py contains the binary classification analysis based on a gene expression study (Golub et al., 1999) extracted from OpenML (https://www.openml.org/search?type=data&sort=runs&id=1104&status=active). Finally, PANCAN_classification.py contains the multiclass classification analysis based on a TCGA Pan-Cancer RNA-Seq dataset (Weinstein et al., 2013) extracted from the UCI Machine Learning repository (https://archive.ics.uci.edu/dataset/401/gene+expression+cancer+rna+seq).
 
 # Running an experiment
 To setup an analysis: pip install -r requirements.txt
 
 Each script runs standalone: 
 python Simulation1.py
+
 python Liver_toxicity_regression.py
 
 Each prints the results tables with Monte Carlo means and standard errors for every reported metric. Regression tasks report variance and covariance explained, along with mean squared error, while classification studies report accuracy, AUC, precision, and variance explained--- the multiclass experiment additionally reports F1 score, and per-class precision, recall and F1 score.

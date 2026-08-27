@@ -1,0 +1,8 @@
+numpy>=1.24
+scipy>=1.10
+scikit-learn>=1.2,<1.5
+autograd>=1.6
+pymanopt>=2.2
+torch>=2.0
+# sispca is not on PyPI — install from GitHub:
+#   pip install git+https://github.com/JiayuSuPKU/sispca.git
